@@ -1,34 +1,7 @@
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler
-from shops import add_store_name, add_store_location, ADD_STORE_NAME, ADD_STORE_LOCATION
-TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
-# --- Функция /start ---
-def start(update: Update, context):
-    # Сбрасываем состояние ConversationHandler
-    context.user_data.clear()
-    keyboard = [["➕ Добавить скидку"]]
-    update.message.reply_text(
-        "Бот запущен",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+update.message.reply_text(
+    "Добавьте адрес магазина.\n⚠️ Убедитесь, что GPS включён!",
+    reply_markup=ReplyKeyboardMarkup(
+        [[KeyboardButton("Поделиться местоположением", request_location=True)]],
+        one_time_keyboard=True
     )
-# --- Создаём updater и dispatcher ---
-updater = Updater(TOKEN, use_context=True)
-dp = updater.dispatcher
-# --- ConversationHandler для добавления магазина ---
-add_store_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.regex("^➕ Добавить скидку$"), add_store_name)],
-    states={
-        ADD_STORE_NAME: [MessageHandler(Filters.text & ~Filters.command, add_store_name)],
-        ADD_STORE_LOCATION: [MessageHandler(Filters.location, add_store_location)],
-    },
-    fallbacks=[]
 )
-dp.add_handler(add_store_handler)
-dp.add_handler(CommandHandler("start", start))
-# --- Точка входа ---
-def main():
-    print("Bot started")
-    updater.start_polling()
-    updater.idle()
-if __name__ == "__main__":
-    main()
