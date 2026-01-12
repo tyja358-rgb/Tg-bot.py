@@ -1,8 +1,14 @@
-add_store_handler = ConversationHandler(
-    entry_points=[MessageHandler(Filters.regex("^➕ Добавить скидку$"), start_add_discount)],
-    states={
-        ADD_STORE_NAME: [MessageHandler(Filters.text & ~Filters.command, add_store_name)],
-        ADD_STORE_LOCATION: [MessageHandler(Filters.location, add_store_location)],
-    },
-    fallbacks=[]
-)
+def add_store_location(update: Update, context: CallbackContext):
+    # Получаем адрес, который ввёл пользователь
+    address = update.message.text
+    store_name = context.user_data["store_name"]
+
+    # Сохраняем магазин с адресом и пустым списком товаров
+    stores[store_name] = {"coords": None, "address": address, "products": []}
+
+    update.message.reply_text(
+        f"Магазин '{store_name}' добавлен с адресом:\n{address}\n\n"
+        "Теперь можно добавлять товары."
+    )
+
+    return -1  # Завершение ConversationHandler для этого шага
