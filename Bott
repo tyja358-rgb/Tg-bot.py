@@ -1,34 +1,9 @@
-import sqlite3
-
-DB_NAME = "kwt.db"
-
-def get_conn():
-    return sqlite3.connect(DB_NAME)
-
-def init_db():
-    conn = get_conn()
-    cur = conn.cursor()
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS shops (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        address TEXT,
-        name TEXT
+def start(update: Update, context):
+    context.user_data.clear()
+    keyboard = [["➕ Добавить скидку"]]  # кнопка в виде ReplyKeyboard
+    update.message.reply_text(
+        "Добро пожаловать 👋",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard, resize_keyboard=True, one_time_keyboard=True
+        )
     )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS discounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        shop_name TEXT,
-        address TEXT,
-        price_before REAL,
-        price_after REAL,
-        currency TEXT,
-        discount REAL,
-        photo_id TEXT
-    )
-    """)
-
-    conn.commit()
-    conn.close()
