@@ -10,9 +10,29 @@ ADD_STORE_NAME, ADD_STORE_LOCATION = range(2)
 # словарь магазинов
 stores = {}
 
+# Шаг 1: просим название магазина
 def add_store_name(update: Update, context: CallbackContext):
-    context.user_data["store_name"] = update.message.text
+    update.message.reply_text(
+        "Напишите название магазина:",
+        reply_markup=ReplyKeyboardMarkup(
+            [["Назад"]],
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+    )
+    return ADD_STORE_NAME  # ждем, пока пользователь отправит текст
 
+# Шаг 2: получаем название магазина и просим локацию
+def add_store_location(update: Update, context: CallbackContext):
+    # если это текст названия
+    store_name = update.message.text
+    if store_name.lower() == "назад":
+        update.message.reply_text("Вы вернулись назад.")
+        return -1
+
+    context.user_data["store_name"] = store_name
+
+    # теперь просим локацию
     update.message.reply_text(
         "Добавьте адрес магазина.\n⚠️ Убедитесь, что GPS включён!\nНажмите кнопку 'Поделиться местоположением'.",
         reply_markup=ReplyKeyboardMarkup(
@@ -20,10 +40,10 @@ def add_store_name(update: Update, context: CallbackContext):
             one_time_keyboard=True
         )
     )
+    return ADD_STORE_LOCATION  # ждем локацию
 
-    return ADD_STORE_LOCATION  # <-- 4 пробела от начала строки
-
-def add_store_location(update: Update, context: CallbackContext):
+# Шаг 3: получаем геолокацию и сохраняем магазин
+def store_location_received(update: Update, context: CallbackContext):
     loc = update.message.location
     if not loc:
         update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
@@ -36,4 +56,4 @@ def add_store_location(update: Update, context: CallbackContext):
 
     update.message.reply_text(f"Магазин '{store_name}' добавлен с адресом:\n{address}")
 
-    return -1  # завершение ConversationHandler
+    return -1  # конец ConversationHandler
