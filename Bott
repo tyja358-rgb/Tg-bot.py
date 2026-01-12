@@ -1,9 +1,4 @@
-def start(update: Update, context):
-    context.user_data.clear()
-    keyboard = [["➕ Добавить скидку"]]  # кнопка в виде ReplyKeyboard
-    update.message.reply_text(
-        "Добро пожаловать 👋",
-        reply_markup=ReplyKeyboardMarkup(
-            keyboard, resize_keyboard=True, one_time_keyboard=True
-        )
-    )
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
+
+
