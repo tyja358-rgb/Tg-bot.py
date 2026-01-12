@@ -1,16 +1,37 @@
+from geopy.geocoders import Nominatim
+
+geolocator = Nominatim(user_agent="kwt-bot")  # добавить один раз в начале файла
+
 def add_store_location(update, context):
     loc = update.message.location
     if not loc:
-        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
+        update.message.reply_text(
+            "Не удалось получить локацию. Попробуйте снова."
+        )
         return ADD_STORE_LOCATION  # остаться на этом шаге
 
     coords = (loc.latitude, loc.longitude)
     # Автоматическое получение текстового адреса
-    address = geolocator.reverse(coords).address
-    store_name = context.user_data.get("store_name", "Неизвестный магазин")
-    stores[store_name] = {"coords": coords, "address": address, "products": []}
+    try:
+        address = geolocator.reverse(coords).address
+    except:
+        address = f"{round(coords[0],4)}, {round(coords[1],4)}"
 
+    context.user_data["address"] = address
+
+    # Проверка, есть ли уже магазины на этом адресе
+    shops_at_address = addresses.get(address, [])
+    if shops_at_address:
+        keyboard = [[s] for s in sorted(shops_at_address)]
+        keyboard.append(["➕ Добавить название магазина"])
+        update.message.reply_text(
+            f"🏬 Магазины на этом адресе ({address}):\nВыберите магазин",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        return STORE_SELECT
+
+    # Если магазинов нет — просим ввести название
     update.message.reply_text(
-        f"✅ Магазин '{store_name}' добавлен с адресом:\n{address}"
+        f"Адрес определён автоматически:\n{address}\n✏️ Введите название магазина"
     )
-    return ConversationHandler.END  # завершение добавления
+    return STORE_NAME
