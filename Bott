@@ -1,48 +1,8 @@
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import CallbackContext
-from geopy.geocoders import Nominatim
-
-# Инициализация геолокатора
-geolocator = Nominatim(user_agent="kwt-bot")
-
-# Состояния ConversationHandler
-ADD_STORE_NAME, ADD_STORE_LOCATION = range(2)
-
-# Словарь магазинов
-stores = {}
-
 # --- Функция для начала добавления скидки ---
 def start_add_discount(update: Update, context: CallbackContext):
     if stores:
         shop_list = "\n".join(sorted(stores.keys()))
         update.message.reply_text(f"Список магазинов:\n{shop_list}")
-    update.message.reply_text("Чтобы добавить новый магазин, введите название магазина:")
-    return ADD_STORE_NAME
-
-# --- Ввод названия магазина ---
-def add_store_name(update: Update, context: CallbackContext):
-    context.user_data["store_name"] = update.message.text
-    update.message.reply_text(
-        f"Название магазина '{update.message.text}' сохранено ✅\nТеперь поделитесь местоположением магазина.",
-        reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton("Поделиться местоположением", request_location=True)]],
-            one_time_keyboard=True
-        )
-    )
-    return ADD_STORE_LOCATION
-
-# --- Ввод геолокации магазина ---
-def add_store_location(update: Update, context: CallbackContext):
-    loc = update.message.location
-    if not loc:
-        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
-        return ADD_STORE_LOCATION
-
-    coords = (loc.latitude, loc.longitude)
-    address = geolocator.reverse(coords).address
-    store_name = context.user_data["store_name"]
-    stores[store_name] = {"coords": coords, "address": address, "products": []}
-
-    update.message.reply_text(f"Магазин '{store_name}' добавлен с адресом:\n{address}")
-
-    return -1  # Завершение ConversationHandler
+    # Запрашиваем у пользователя текстовое название нового магазина
+    update.message.reply_text("Введите название магазина:")
+    return ADD_STORE_NAME  # <-- теперь ждём текст
