@@ -1,179 +1,34 @@
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup,
-    KeyboardButton
-)
-from telegram.ext import (
-    ConversationHandler,
-    MessageHandler,
-    Filters,
-    CallbackContext
-)
+import sqlite3
 
-(
-    PHOTO,
-    PRICE_BEFORE,
-    PRICE_AFTER,
-    CURRENCY,
-    LOCATION,
-    STORE_SELECT,
-    STORE_NAME
-) = range(7)
+DB_NAME = "kwt.db"
 
-# --- ПАМЯТЬ ---
-addresses = {}   # address -> [shops]
-discounts = []
+def get_conn():
+    return sqlite3.connect(DB_NAME)
 
+def init_db():
+    conn = get_conn()
+    cur = conn.cursor()
 
-# --- СТАРТ ---
-def start_discount(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        "📸 Сделайте фото скидки\n"
-        "Товар и ценник должны быть в кадре"
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS shops (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        address TEXT,
+        name TEXT
     )
-    return PHOTO
+    """)
 
-
-# --- ФОТО ---
-def get_photo(update: Update, context: CallbackContext):
-    context.user_data.clear()
-    context.user_data["photo"] = update.message.photo[-1].file_id
-    update.message.reply_text("💰 Введите цену ДО")
-    return PRICE_BEFORE
-
-
-# --- ЦЕНА ДО ---
-def price_before(update: Update, context: CallbackContext):
-    try:
-        context.user_data["before"] = float(update.message.text)
-    except:
-        update.message.reply_text("Введите число")
-        return PRICE_BEFORE
-
-    update.message.reply_text("🔻 Введите цену ПОСЛЕ")
-    return PRICE_AFTER
-
-
-# --- ЦЕНА ПОСЛЕ ---
-def price_after(update: Update, context: CallbackContext):
-    try:
-        context.user_data["after"] = float(update.message.text)
-    except:
-        update.message.reply_text("Введите число")
-        return PRICE_AFTER
-
-    keyboard = [["MDL", "EUR", "USD"]]
-    update.message.reply_text(
-        "💱 Выберите валюту",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS discounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        shop_name TEXT,
+        address TEXT,
+        price_before REAL,
+        price_after REAL,
+        currency TEXT,
+        discount REAL,
+        photo_id TEXT
     )
-    return CURRENCY
+    """)
 
-
-# --- ВАЛЮТА ---
-def currency(update: Update, context: CallbackContext):
-    cur = update.message.text
-    if cur not in ["MDL", "EUR", "USD"]:
-        return CURRENCY
-
-    before = context.user_data["before"]
-    after = context.user_data["after"]
-    discount = (before - after) / before * 100
-
-    if discount < 20:
-        update.message.reply_text(
-            f"❌ Скидка {discount:.1f}%\nМинимум 20%"
-        )
-        return ConversationHandler.END
-
-    context.user_data["currency"] = cur
-    context.user_data["discount"] = discount
-
-    update.message.reply_text(
-        "📍 Отправьте геолокацию магазина\n"
-        "Убедитесь, что GPS включён",
-        reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton("📍 Поделиться локацией", request_location=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True
-        )
-    )
-    return LOCATION
-
-
-# --- ЛОКАЦИЯ ---
-def location(update: Update, context: CallbackContext):
-    loc = update.message.location
-    address = f"{round(loc.latitude,4)}, {round(loc.longitude,4)}"
-    context.user_data["address"] = address
-
-    shops = addresses.get(address, [])
-
-    if shops:
-        keyboard = [[s] for s in sorted(shops)]
-        keyboard.append(["➕ Добавить название магазина"])
-        update.message.reply_text(
-            "🏬 Выберите магазин",
-            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        )
-        return STORE_SELECT
-
-    update.message.reply_text("✏️ Введите название магазина")
-    return STORE_NAME
-
-
-# --- ВЫБОР МАГАЗИНА ---
-def select_store(update: Update, context: CallbackContext):
-    if update.message.text == "➕ Добавить название магазина":
-        update.message.reply_text("✏️ Введите название магазина")
-        return STORE_NAME
-
-    context.user_data["store"] = update.message.text
-    return finish(update, context)
-
-
-# --- НАЗВАНИЕ МАГАЗИНА ---
-def store_name(update: Update, context: CallbackContext):
-    name = update.message.text
-    addr = context.user_data["address"]
-
-    addresses.setdefault(addr, []).append(name)
-    context.user_data["store"] = name
-
-    return finish(update, context)
-
-
-# --- ФИНИШ ---
-def finish(update: Update, context: CallbackContext):
-    d = context.user_data
-    discounts.append(d.copy())
-
-    update.message.reply_text(
-        f"✅ Скидка добавлена\n"
-        f"🏬 {d['store']}\n"
-        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
-        f"📊 {d['discount']:.1f}%"
-    )
-    return ConversationHandler.END
-
-
-# --- ЭКСПОРТ HANDLER ---
-def get_conversation_handler():
-    return ConversationHandler(
-        entry_points=[
-            MessageHandler(
-                Filters.regex("^➕ Добавить скидку$"),
-                start_discount
-            )
-        ],
-        states={
-            PHOTO: [MessageHandler(Filters.photo, get_photo)],
-            PRICE_BEFORE: [MessageHandler(Filters.text, price_before)],
-            PRICE_AFTER: [MessageHandler(Filters.text, price_after)],
-            CURRENCY: [MessageHandler(Filters.text, currency)],
-            LOCATION: [MessageHandler(Filters.location, location)],
-            STORE_SELECT: [MessageHandler(Filters.text, select_store)],
-            STORE_NAME: [MessageHandler(Filters.text, store_name)],
-        },
-        fallbacks=[]
-    )
+    conn.commit()
+    conn.close()
