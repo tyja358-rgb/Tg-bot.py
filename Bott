@@ -1,7 +1,7 @@
 from telegram.ext import Updater, CommandHandler
 from shops import get_conversation_handler
 
-TOKEN = "ВСТАВЬ_СЮДА_ТОКЕН"
+TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
 
 def start(update, context):
     update.message.reply_text(
