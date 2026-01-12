@@ -1,12 +1,5 @@
-from telegram import Update
-from telegram.ext import CallbackContext, ConversationHandler
-from geopy.geocoders import Nominatim
-
-geolocator = Nominatim(user_agent="kwt-bot")
-
-stores = {}
-
-def add_store_location(update: Update, context: CallbackContext):
+def add_store_location(update, context):
+    global stores
     loc = update.message.location
     if not loc:
         update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
@@ -14,10 +7,22 @@ def add_store_location(update: Update, context: CallbackContext):
 
     coords = (loc.latitude, loc.longitude)
     address = geolocator.reverse(coords).address
-    store_name = context.user_data.get("store_name", "Неизвестный магазин")
-    stores[store_name] = {"coords": coords, "address": address, "products": []}
+    context.user_data["address"] = address  # сохраняем адрес
 
-    update.message.reply_text(
-        f"✅ Магазин '{store_name}' добавлен с адресом:\n{address}"
-    )
-    return ConversationHandler.END
+    # 🔹 Проверка существующих магазинов на этом адресе
+    existing_stores = [name for name, data in stores.items() if data["address"] == address]
+
+    if existing_stores:
+        keyboard = [[s] for s in sorted(existing_stores)]
+        keyboard.append(["➕ Добавить название магазина"])
+        update.message.reply_text(
+            f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        return STORE_SELECT  # ждём выбор или добавление магазина
+    else:
+        update.message.reply_text(
+            f"Адрес: {address}\n✏️ Введите название магазина",
+            reply_markup=ReplyKeyboardMarkup([["➕ Добавить название магазина"]], resize_keyboard=True)
+        )
+        return STORE_NAME  # ждём ввода названия
