@@ -1,3 +1,18 @@
+def store_select(update, context):
+    choice = update.message.text
+    if choice == "➕ Новый магазин":
+        update.message.reply_text("✏️ Введите название магазина:")
+        return STORE_NAME
+    else:
+        # Пользователь выбрал существующий магазин
+        context.user_data["store_name"] = choice
+        update.message.reply_text(f"✅ Вы выбрали магазин: {choice}\n📍 {context.user_data.get('address','Адрес не указан')}")
+        return ConversationHandler.END
+
+
+
+
+
 def add_store_location(update, context):
     global stores
     loc = update.message.location
@@ -7,22 +22,26 @@ def add_store_location(update, context):
 
     coords = (loc.latitude, loc.longitude)
     address = geolocator.reverse(coords).address
-    context.user_data["address"] = address
+    context.user_data["address"] = address  # сохраняем адрес
 
     # Проверяем, есть ли магазины по этому адресу
     existing_stores = [name for name, data in stores.items() if data["address"] == address]
 
     if existing_stores:
+        # Если есть магазины, показываем кнопки для выбора
         keyboard = [[s] for s in sorted(existing_stores)]
-        keyboard.append(["➕ Новый магазин"])  # кнопка отличается от названия магазина
+        keyboard.append(["➕ Новый магазин"])  # кнопка для добавления нового
         update.message.reply_text(
             f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
             reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         )
-        return STORE_SELECT  # ждём выбор магазина или ➕ Новый магазин
+        return STORE_SELECT  # ждём выбор магазина или нажатие ➕ Новый магазин
     else:
         # Если магазинов нет — сразу предлагаем ввести название
         update.message.reply_text(
             f"Адрес: {address}\n✏️ Введите название магазина:",
         )
         return STORE_NAME
+
+
+
