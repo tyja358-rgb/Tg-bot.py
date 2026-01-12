@@ -1,9 +1,18 @@
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
+from telegram.ext import CallbackContext
+from geopy.geocoders import Nominatim
+
+geolocator = Nominatim(user_agent="kwt-bot")
+
+# состояния ConversationHandler
+ADD_STORE_NAME, ADD_STORE_LOCATION = range(2)
+
+# словарь магазинов
+stores = {}
 
 def add_store_name(update: Update, context: CallbackContext):
-    # сохраняем название магазина
     context.user_data["store_name"] = update.message.text
 
-    # просим пользователя отправить локацию
     update.message.reply_text(
         "Добавьте адрес магазина.\n⚠️ Убедитесь, что GPS включён!\nНажмите кнопку 'Поделиться местоположением'.",
         reply_markup=ReplyKeyboardMarkup(
@@ -12,4 +21,19 @@ def add_store_name(update: Update, context: CallbackContext):
         )
     )
 
-    return ADD_STORE_LOCATION  # <-- 4 пробела, как у update.message.reply_text
+    return ADD_STORE_LOCATION  # <-- 4 пробела от начала строки
+
+def add_store_location(update: Update, context: CallbackContext):
+    loc = update.message.location
+    if not loc:
+        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
+        return ADD_STORE_LOCATION
+
+    coords = (loc.latitude, loc.longitude)
+    address = geolocator.reverse(coords).address
+    store_name = context.user_data["store_name"]
+    stores[store_name] = {"coords": coords, "address": address, "products": []}
+
+    update.message.reply_text(f"Магазин '{store_name}' добавлен с адресом:\n{address}")
+
+    return -1  # завершение ConversationHandler
