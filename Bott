@@ -1,13 +1,20 @@
 def store_select(update, context):
     choice = update.message.text
+
     if choice == "➕ Новый магазин":
+        # Пользователь хочет добавить новый магазин
         update.message.reply_text("✏️ Введите название магазина:")
         return STORE_NAME
     else:
         # Пользователь выбрал существующий магазин
         context.user_data["store_name"] = choice
-        update.message.reply_text(f"✅ Вы выбрали магазин: {choice}\n📍 {context.user_data.get('address','Адрес не указан')}")
-        return ConversationHandler.END
+        update.message.reply_text(
+            f"✅ Вы выбрали магазин: {choice}\n"
+            f"📍 {context.user_data.get('address','Адрес не указан')}"
+        )
+        return ConversationHandler.END  # завершение добавления
+
+
 
 
 
@@ -18,30 +25,29 @@ def add_store_location(update, context):
     loc = update.message.location
     if not loc:
         update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
-        return ADD_STORE_LOCATION
+        return ADD_STORE_LOCATION  # остаёмся на этом шаге
 
     coords = (loc.latitude, loc.longitude)
+    # Автоматическое получение текстового адреса
     address = geolocator.reverse(coords).address
     context.user_data["address"] = address  # сохраняем адрес
 
-    # Проверяем, есть ли магазины по этому адресу
+    # 🔹 Проверяем, есть ли магазины по этому адресу
     existing_stores = [name for name, data in stores.items() if data["address"] == address]
 
     if existing_stores:
-        # Если есть магазины, показываем кнопки для выбора
+        # Если есть магазины — показываем список + кнопку добавить новый
         keyboard = [[s] for s in sorted(existing_stores)]
-        keyboard.append(["➕ Новый магазин"])  # кнопка для добавления нового
+        keyboard.append(["➕ Новый магазин"])
         update.message.reply_text(
             f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
             reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
         )
-        return STORE_SELECT  # ждём выбор магазина или нажатие ➕ Новый магазин
+        return STORE_SELECT  # ждём выбор магазина или "➕ Новый магазин"
     else:
-        # Если магазинов нет — сразу предлагаем ввести название
+        # Если магазинов нет — сразу предлагаем ввести название магазина
         update.message.reply_text(
             f"Адрес: {address}\n✏️ Введите название магазина:",
+            reply_markup=ReplyKeyboardRemove()  # убираем кнопки, чтобы не было лишних
         )
         return STORE_NAME
-
-
-
