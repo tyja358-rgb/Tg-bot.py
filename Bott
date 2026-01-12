@@ -1,7 +1,28 @@
-update.message.reply_text(
-    f"✅ Скидка добавлена\n"
-    f"🏬 {store_name}\n"
-    f"💰 {price_before} → {price_after} {currency}\n"
-    f"📊 {percent}%\n"
-    f"📍 {context.user_data.get('address','Адрес не указан')}"
-)
+def add_store_location(update, context):
+    global stores
+    loc = update.message.location
+    if not loc:
+        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
+        return ADD_STORE_LOCATION
+
+    coords = (loc.latitude, loc.longitude)
+    address = geolocator.reverse(coords).address
+    context.user_data["address"] = address
+
+    # Проверяем, есть ли магазины по этому адресу
+    existing_stores = [name for name, data in stores.items() if data["address"] == address]
+
+    if existing_stores:
+        keyboard = [[s] for s in sorted(existing_stores)]
+        keyboard.append(["➕ Новый магазин"])  # кнопка отличается от названия магазина
+        update.message.reply_text(
+            f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
+            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+        )
+        return STORE_SELECT  # ждём выбор магазина или ➕ Новый магазин
+    else:
+        # Если магазинов нет — сразу предлагаем ввести название
+        update.message.reply_text(
+            f"Адрес: {address}\n✏️ Введите название магазина:",
+        )
+        return STORE_NAME
