@@ -1,5 +1,6 @@
-# --- Импорты ---
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
-from db import init_db
-from shops import get_conversation_handler
+update.message.reply_text(
+    "📸 Сделайте фото скидки.\n"
+    "Товар и ценник должны быть в кадре.\n"
+    "Нажмите 📎 → Камера, сделайте фото и отправьте его.\n"
+    "Галерея использовать нельзя."
+)
