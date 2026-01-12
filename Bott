@@ -1,14 +1,24 @@
-def add_store_location(update: Update, context: CallbackContext):
-    # Получаем адрес, который ввёл пользователь
-    address = update.message.text
-    store_name = context.user_data["store_name"]
+from telegram.ext import Updater, CommandHandler
+from shops import get_conversation_handler
 
-    # Сохраняем магазин с адресом и пустым списком товаров
-    stores[store_name] = {"coords": None, "address": address, "products": []}
+TOKEN = "ВСТАВЬ_СЮДА_ТОКЕН"
 
+def start(update, context):
     update.message.reply_text(
-        f"Магазин '{store_name}' добавлен с адресом:\n{address}\n\n"
-        "Теперь можно добавлять товары."
+        "Добро пожаловать 👋\nНажмите «➕ Добавить скидку»"
     )
 
-    return -1  # Завершение ConversationHandler для этого шага
+def main():
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+
+    # 🔥 ВЕСЬ СЦЕНАРИЙ СКИДКИ — В shops.py
+    dp.add_handler(get_conversation_handler())
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
