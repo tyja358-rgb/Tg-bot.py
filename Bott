@@ -1,7 +1,15 @@
-update.message.reply_text(
-    "Добавьте адрес магазина.\n⚠️ Убедитесь, что GPS включён!",
-    reply_markup=ReplyKeyboardMarkup(
-        [[KeyboardButton("Поделиться местоположением", request_location=True)]],
-        one_time_keyboard=True
+
+def add_store_name(update: Update, context: CallbackContext):
+    # сохраняем название магазина
+    context.user_data["store_name"] = update.message.text
+
+    # просим пользователя отправить локацию
+    update.message.reply_text(
+        "Добавьте адрес магазина.\n⚠️ Убедитесь, что GPS включён!\nНажмите кнопку 'Поделиться местоположением'.",
+        reply_markup=ReplyKeyboardMarkup(
+            [[KeyboardButton("Поделиться местоположением", request_location=True)]],
+            one_time_keyboard=True
+        )
     )
-)
+
+    return ADD_STORE_LOCATION  # <-- 4 пробела, как у update.message.reply_text
