@@ -1,6 +1,16 @@
-update.message.reply_text(
-    "📸 Сделайте фото скидки.\n"
-    "Товар и ценник должны быть в кадре.\n"
-    "Нажмите 📎 → Камера, сделайте фото и отправьте его.\n"
-    "Галерея использовать нельзя."
-)
+def add_store_location(update, context):
+    loc = update.message.location
+    if not loc:
+        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
+        return ADD_STORE_LOCATION  # остаться на этом шаге
+
+    coords = (loc.latitude, loc.longitude)
+    # Автоматическое получение текстового адреса
+    address = geolocator.reverse(coords).address
+    store_name = context.user_data.get("store_name", "Неизвестный магазин")
+    stores[store_name] = {"coords": coords, "address": address, "products": []}
+
+    update.message.reply_text(
+        f"✅ Магазин '{store_name}' добавлен с адресом:\n{address}"
+    )
+    return ConversationHandler.END  # завершение добавления
