@@ -1,15 +1,16 @@
 def add_store_location(update, context):
-    global stores
+    global stores  # обязательно первой строкой
+
     loc = update.message.location
     if not loc:
         update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
-        return ADD_STORE_LOCATION
+        return ADD_STORE_LOCATION  # остаёмся на этом шаге
 
     coords = (loc.latitude, loc.longitude)
-    address = geolocator.reverse(coords).address
+    address = geolocator.reverse(coords).address  # автоматически получаем текстовый адрес
     context.user_data["address"] = address  # сохраняем адрес
 
-    # 🔹 Проверка существующих магазинов на этом адресе
+    # Проверка существующих магазинов на этом адресе
     existing_stores = [name for name, data in stores.items() if data["address"] == address]
 
     if existing_stores:
@@ -25,4 +26,4 @@ def add_store_location(update, context):
             f"Адрес: {address}\n✏️ Введите название магазина",
             reply_markup=ReplyKeyboardMarkup([["➕ Добавить название магазина"]], resize_keyboard=True)
         )
-        return STORE_NAME  # ждём ввода названия
+        return STORE_NAME  # ждём название магазина
