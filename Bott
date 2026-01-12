@@ -1,8 +1,8 @@
-# --- Функция для начала добавления скидки ---
-def start_add_discount(update: Update, context: CallbackContext):
-    if stores:
-        shop_list = "\n".join(sorted(stores.keys()))
-        update.message.reply_text(f"Список магазинов:\n{shop_list}")
-    # Запрашиваем у пользователя текстовое название нового магазина
-    update.message.reply_text("Введите название магазина:")
-    return ADD_STORE_NAME  # <-- теперь ждём текст
+add_store_handler = ConversationHandler(
+    entry_points=[MessageHandler(Filters.regex("^➕ Добавить скидку$"), start_add_discount)],
+    states={
+        ADD_STORE_NAME: [MessageHandler(Filters.text & ~Filters.command, add_store_name)],
+        ADD_STORE_LOCATION: [MessageHandler(Filters.location, add_store_location)],
+    },
+    fallbacks=[]
+)
