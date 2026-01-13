@@ -1,89 +1,4 @@
-from geopy.geocoders import Nominatim
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from telegram.ext import ConversationHandler, MessageHandler, Filters, CallbackContext
-
-# --- СОСТОЯНИЯ ---
-(PHOTO, PRICE_BEFORE, PRICE_AFTER, CURRENCY, LOCATION, STORE_SELECT, STORE_NAME) = range(7)
-
-# --- ПАМЯТЬ ---
-stores = {}         # store_name -> {"coords": (), "address": "", "products": []}
-addresses = {}      # address -> [store_name]
-discounts = []
-
-# --- ГЕОЛОКАТОР ---
-geolocator = Nominatim(user_agent="kwt-bot")
-
-# --- СТАРТ ---
-def start_discount(update: Update, context: CallbackContext):
-    update.message.reply_text(
-        "📸 Сделайте фото скидки.\n"
-        "Товар и ценник должны быть в кадре.\n"
-        "Нажмите 📎 → Камера, сделайте фото и отправьте его.\n"
-    )
-    return PHOTO
-
-# --- ФОТО ---
-def get_photo(update: Update, context: CallbackContext):
-    context.user_data.clear()
-    context.user_data["photo"] = update.message.photo[-1].file_id
-    update.message.reply_text("💰 Введите цену ДО")
-    return PRICE_BEFORE
-
-# --- ЦЕНА ДО ---
-def price_before(update: Update, context: CallbackContext):
-    try:
-        context.user_data["before"] = float(update.message.text)
-    except:
-        update.message.reply_text("Введите число")
-        return PRICE_BEFORE
-    update.message.reply_text("🔻 Введите цену ПОСЛЕ")
-    return PRICE_AFTER
-
-# --- ЦЕНА ПОСЛЕ ---
-def price_after(update: Update, context: CallbackContext):
-    try:
-        context.user_data["after"] = float(update.message.text)
-    except:
-        update.message.reply_text("Введите число")
-        return PRICE_AFTER
-
-    keyboard = [["MDL", "EUR", "USD"]]
-    update.message.reply_text(
-        "💱 Выберите валюту",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    )
-    return CURRENCY
-
-# --- ВАЛЮТА ---
-def currency(update: Update, context: CallbackContext):
-    cur = update.message.text
-    if cur not in ["MDL", "EUR", "USD"]:
-        return CURRENCY
-
-    before = context.user_data["before"]
-    after = context.user_data["after"]
-    discount = (before - after) / before * 100
-
-    if discount < 20:
-        update.message.reply_text(f"❌ Скидка {discount:.1f}%\nМинимум 20%")
-        return ConversationHandler.END
-
-    context.user_data["currency"] = cur
-    context.user_data["discount"] = discount
-
-    update.message.reply_text(
-        "📍 Отправьте геолокацию магазина\n"
-        "Убедитесь, что GPS включён",
-        reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton("📍 Поделиться локацией", request_location=True)]],
-            resize_keyboard=True,
-            one_time_keyboard=True
-        )
-    )
-    return LOCATION
-
-# --- ЛОКАЦИЯ ---
-def add_store_location(update: Update, context: CallbackContext):
+def add_store_location(update, context):
     global stores
     loc = update.message.location
     if not loc:
@@ -92,87 +7,16 @@ def add_store_location(update: Update, context: CallbackContext):
 
     coords = (loc.latitude, loc.longitude)
     address = geolocator.reverse(coords).address
-    context.user_data["address"] = address  # сохраняем адрес
+    context.user_data["address"] = address
 
-    # Проверка существующих магазинов по адресу
+    # Проверяем, есть ли магазины по этому адресу
     existing_stores = [name for name, data in stores.items() if data["address"] == address]
 
-    if existing_stores:
-        keyboard = [[s] for s in sorted(existing_stores)]
-        keyboard.append(["➕ Новый магазин"])  # кнопка для нового магазина
-        update.message.reply_text(
-            f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
-            reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        )
-        return STORE_SELECT
-    else:
-        # Если магазинов нет, сразу предлагаем ввести название
-        update.message.reply_text(
-            f"Адрес: {address}\n✏️ Введите название магазина:",
-            reply_markup=ReplyKeyboardRemove()
-        )
-        return STORE_NAME
+    keyboard = [[s] for s in sorted(existing_stores)] if existing_stores else []
+    keyboard.append(["➕ Новый магазин"])  # кнопка для нового магазина
 
-# --- ВЫБОР МАГАЗИНА ---
-def store_select(update: Update, context: CallbackContext):
-    choice = update.message.text
-    if choice == "➕ Новый магазин":
-        update.message.reply_text("✏️ Введите название магазина:")
-        return STORE_NAME
-    else:
-        context.user_data["store_name"] = choice
-        update.message.reply_text(
-            f"✅ Вы выбрали магазин: {choice}\n"
-            f"📍 {context.user_data.get('address','Адрес не указан')}"
-        )
-        return ConversationHandler.END
-
-# --- НАЗВАНИЕ МАГАЗИНА ---
-def store_name(update: Update, context: CallbackContext):
-    name = update.message.text
-    addr = context.user_data["address"]
-
-    # Добавляем в адреса
-    addresses.setdefault(addr, []).append(name)
-
-    # Сохраняем в глобальный stores
-    global stores
-    stores[name] = {
-        "coords": (update.message.location.latitude, update.message.location.longitude) if update.message.location else None,
-        "address": addr,
-        "products": []
-    }
-
-    context.user_data["store"] = name
-    return finish(update, context)
-
-# --- ФИНИШ ---
-def finish(update: Update, context: CallbackContext):
-    d = context.user_data
-    discounts.append(d.copy())
     update.message.reply_text(
-        f"✅ Скидка добавлена\n"
-        f"🏬 {d['store']}\n"
-        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
-        f"📊 {d['discount']:.1f}%\n"
-        f"📍 {d.get('address','Адрес не указан')}"
+        f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     )
-    return ConversationHandler.END
-
-# --- ЭКСПОРТ HANDLER ---
-def get_conversation_handler():
-    return ConversationHandler(
-        entry_points=[
-            MessageHandler(Filters.regex("^➕ Добавить скидку$"), start_discount)
-        ],
-        states={
-            PHOTO: [MessageHandler(Filters.photo, get_photo)],
-            PRICE_BEFORE: [MessageHandler(Filters.text, price_before)],
-            PRICE_AFTER: [MessageHandler(Filters.text, price_after)],
-            CURRENCY: [MessageHandler(Filters.text, currency)],
-            LOCATION: [MessageHandler(Filters.location, add_store_location)],
-            STORE_SELECT: [MessageHandler(Filters.text, store_select)],
-            STORE_NAME: [MessageHandler(Filters.text, store_name)],
-        },
-        fallbacks=[]
-    )
+    return STORE_SELECT
