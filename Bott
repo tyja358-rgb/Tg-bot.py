@@ -1,46 +1,44 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
-from shops import get_conversation_handler, start_discount
+from shops import get_conversation_handler, start_discount  # твой shops.py
+from db import init_db
 
-TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
+TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
 
-# Главное меню
 MAIN_MENU = [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]]
 
 def start(update: Update, context: CallbackContext):
-    """Старт бота и главное меню"""
     context.user_data.clear()
+    context.user_data["in_discount_flow"] = False
     update.message.reply_text(
         "Добро пожаловать 👋\nВыберите действие:",
         reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
     )
 
 def main_menu_handler(update: Update, context: CallbackContext):
-    """Обработка нажатий главного меню"""
     text = update.message.text
 
-    # Если пользователь уже в процессе добавления скидки — игнорируем повторное нажатие
-    if context.user_data.get("in_discount_flow"):
-        update.message.reply_text(
-            "Вы уже начали добавление скидки. Пожалуйста, завершите текущий процесс или нажмите «❌ Отмена».",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
-        )
-        return
-
+    # 🔹 Проверяем, не в процессе ли добавления скидки
     if text == "➕ Добавить скидку":
+        if context.user_data.get("in_discount_flow"):
+            update.message.reply_text(
+                "Вы уже начали добавление скидки. Завершите текущий процесс или нажмите ❌ Отмена.",
+                reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
+            )
+            return
         context.user_data["in_discount_flow"] = True
         return start_discount(update, context)
 
     elif text == "🔍 Найти скидку":
         update.message.reply_text(
-            "🔍 Вы нажали 'Найти скидку'. Пока заглушка.",
+            "🔍 Вы нажали 'Найти скидку'. Функционал пока заглушка.",
             reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
         )
 
     elif text == "💰 KWT / Бар":
         update.message.reply_text(
-            "💰 Вы нажали 'KWT / Бар'. Пока заглушка.",
+            "💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.",
             reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
         )
 
@@ -51,20 +49,19 @@ def main_menu_handler(update: Update, context: CallbackContext):
         )
 
 def main():
+    print(">>> MAIN STARTED <<<")
+    init_db()
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
-    # Команда /start
     dp.add_handler(CommandHandler("start", start))
-
-    # Главное меню слушаем все кнопки
     dp.add_handler(MessageHandler(Filters.text & Filters.regex("➕ Добавить скидку|🔍 Найти скидку|💰 KWT / Бар"), main_menu_handler))
 
-    # Подключаем сценарий скидок из shops.py
+    # подключаем ConversationHandler из shops.py
     dp.add_handler(get_conversation_handler())
 
-    # Старт polling
     updater.start_polling()
+    print(">>> POLLING START <<<")
     updater.idle()
 
 if __name__ == "__main__":
