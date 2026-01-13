@@ -1,70 +1,36 @@
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-
-from shops import get_conversation_handler, start_discount  # импорт сценария скидок
-from db import init_db
-
-TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
-
-# Главное меню
-MAIN_MENU = [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]]
-
-def start(update: Update, context: CallbackContext):
-    """Старт бота и главное меню"""
-    context.user_data.clear()
-    update.message.reply_text(
-        "Добро пожаловать 👋\nВыберите действие:",
-        reply_markup=ReplyKeyboardMarkup(
-            MAIN_MENU,
-            resize_keyboard=True,
-            one_time_keyboard=True
-        )
-    )
-
 def main_menu_handler(update: Update, context: CallbackContext):
     """Обработка нажатий главного меню"""
     text = update.message.text
 
     if text == "➕ Добавить скидку":
-        # Запускаем сценарий добавления скидки
+        # Сбрасываем данные пользователя, чтобы сценарий стартовал с чистого листа
+        context.user_data.clear()  
+        # Запускаем сценарий добавления скидки из shops.py
         return start_discount(update, context)
 
     elif text == "🔍 Найти скидку":
-        # Заглушка просмотра скидок
-        update.message.reply_text("🔍 Вы нажали 'Найти скидку'. Список скидок появится здесь.")
-
-    elif text == "💰 KWT / Бар":
-        update.message.reply_text("💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.")
-
-    else:
-        # Любой другой текст возвращает в главное меню
+        # Заглушка для поиска скидок
         update.message.reply_text(
-            "Выберите действие из меню:",
+            "🔍 Вы нажали 'Найти скидку'. Функционал пока заглушка.",
             reply_markup=ReplyKeyboardMarkup(
-                MAIN_MENU,
-                resize_keyboard=True,
-                one_time_keyboard=True
+                MAIN_MENU, resize_keyboard=True, one_time_keyboard=True
             )
         )
 
-def main():
-    print(">>> MAIN STARTED <<<")
-    init_db()
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+    elif text == "💰 KWT / Бар":
+        # Заглушка для KWT / Бар
+        update.message.reply_text(
+            "💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.",
+            reply_markup=ReplyKeyboardMarkup(
+                MAIN_MENU, resize_keyboard=True, one_time_keyboard=True
+            )
+        )
 
-    # Команда /start
-    dp.add_handler(CommandHandler("start", start))
-
-    # Главное меню: слушаем все кнопки
-    dp.add_handler(MessageHandler(Filters.text & Filters.regex("➕ Добавить скидку|🔍 Найти скидку|💰 KWT / Бар"), main_menu_handler))
-
-    # Подключаем старый сценарий shops.py
-    dp.add_handler(get_conversation_handler())
-
-    updater.start_polling()
-    print(">>> POLLING START <<<")
-    updater.idle()
-
-if __name__ == "__main__":
-    main()
+    else:
+        # Если пользователь написал что-то не из меню — возвращаем главное меню
+        update.message.reply_text(
+            "Выберите действие из меню:",
+            reply_markup=ReplyKeyboardMarkup(
+                MAIN_MENU, resize_keyboard=True, one_time_keyboard=True
+            )
+        )
