@@ -2,7 +2,14 @@ def currency(update: Update, context: CallbackContext):
     cur = update.message.text.strip().upper()
 
     if cur not in ("MDL", "EUR", "USD"):
-        update.message.reply_text("Пожалуйста, выберите валюту кнопкой ниже 👇")
+        update.message.reply_text(
+            "Выберите валюту кнопкой ниже 👇",
+            reply_markup=ReplyKeyboardMarkup(
+                [["MDL", "EUR", "USD"]],
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+        )
         return CURRENCY
 
     before = context.user_data["before"]
@@ -10,10 +17,10 @@ def currency(update: Update, context: CallbackContext):
 
     discount = (before - after) / before * 100
 
-    # ❗ проверка 20%
     if discount < 20:
         update.message.reply_text(
             f"❌ Скидка {discount:.1f}%\nМинимум — 20%",
+            reply_markup=ReplyKeyboardRemove()
         )
         context.user_data.clear()
         return ConversationHandler.END
@@ -21,6 +28,7 @@ def currency(update: Update, context: CallbackContext):
     context.user_data["currency"] = cur
     context.user_data["discount"] = discount
 
+    # ❗ ВАЖНО: УБИРАЕМ ВСЕ КНОПКИ МЕНЮ
     update.message.reply_text(
         "📍 Отправьте геолокацию магазина",
         reply_markup=ReplyKeyboardMarkup(
