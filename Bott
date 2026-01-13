@@ -202,7 +202,7 @@ def get_conversation_handler():
 def main():
     from db import init_db
     from telegram.ext import Updater
-    TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
+    TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
     print(">>> MAIN STARTED <<<")
     init_db()
     updater = Updater(TOKEN, use_context=True)
