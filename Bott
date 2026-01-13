@@ -1,216 +1,110 @@
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, ConversationHandler, CallbackContext
-from geopy.geocoders import Nominatim
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from shops import discounts  # импортируем глобальный список скидок из shops.py
 
-# --- СОСТОЯНИЯ ---
-PHOTO, PRICE_BEFORE, PRICE_AFTER, CURRENCY, LOCATION, STORE_SELECT, STORE_NAME = range(7)
+TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
 
-# --- ПАМЯТЬ ---
-stores = {}          # store_name -> {"coords": (), "address": "", "products": []}
-addresses = {}       # address -> [store_name]
-discounts = []
-
-# --- ГЕОЛОКАТОР ---
-geolocator = Nominatim(user_agent="kwt-bot")
-
-# --- КЛАВИАТУРЫ ---
+# --- Главное меню ---
 MAIN_MENU = [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]]
-def main_menu_keyboard():
-    return ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
 
-NAV_BUTTONS = ["⬅️ Назад", "❌ Отмена"]
-def nav_keyboard():
-    return ReplyKeyboardMarkup([NAV_BUTTONS], resize_keyboard=True, one_time_keyboard=True)
-
-# --- СТАРТ ---
 def start(update: Update, context: CallbackContext):
     context.user_data.clear()
-    update.message.reply_text("Добро пожаловать 👋", reply_markup=main_menu_keyboard())
-
-# --- ФОТО ---
-def start_discount(update: Update, context: CallbackContext):
-    context.user_data.clear()
     update.message.reply_text(
-        "📸 Сделайте фото скидки.\n"
-        "Товар и ценник должны быть в кадре.\n"
-        "Нажмите 📎 → Камера, сделайте фото и отправьте его.\n"
+        "Добро пожаловать 👋",
+        reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
     )
-    return PHOTO
 
-def get_photo(update: Update, context: CallbackContext):
-    context.user_data["photo"] = update.message.photo[-1].file_id
-    keyboard = [["⬇️ Ввести цену ДО"]]
-    update.message.reply_text("💰 Теперь введите цену ДО", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-    return PRICE_BEFORE
+# --- Найти скидку ---
+def find_discount(update: Update, context: CallbackContext):
+    if not discounts:
+        update.message.reply_text(
+            "Пока нет доступных скидок 😔",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
+        )
+        return
 
-# --- ЦЕНА ДО ---
-def price_before(update: Update, context: CallbackContext):
-    text = update.message.text
-    if text in NAV_BUTTONS:
-        return handle_nav(update, context)
-    try:
-        context.user_data["before"] = float(text)
-    except ValueError:
-        update.message.reply_text("Введите число")
-        return PRICE_BEFORE
+    # Сортируем скидки по проценту от большего к меньшему
+    sorted_discounts = sorted(discounts, key=lambda x: x["discount"], reverse=True)
 
-    update.message.reply_text("🔻 Введите цену ПОСЛЕ", reply_markup=nav_keyboard())
-    return PRICE_AFTER
+    # Сохраняем сортированный список в user_data, чтобы раскрывать магазин по кнопке
+    context.user_data["view_discounts"] = sorted_discounts
+    context.user_data["index"] = 0  # текущая позиция
 
-# --- ЦЕНА ПОСЛЕ ---
-def price_after(update: Update, context: CallbackContext):
-    text = update.message.text
-    if text in NAV_BUTTONS:
-        return handle_nav(update, context)
-    try:
-        context.user_data["after"] = float(text)
-    except ValueError:
-        update.message.reply_text("Введите число")
-        return PRICE_AFTER
+    show_next_discount(update, context)
 
-    keyboard = [["MDL", "EUR", "USD"]]
-    update.message.reply_text("💱 Выберите валюту", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-    return CURRENCY
+def show_next_discount(update: Update, context: CallbackContext):
+    idx = context.user_data.get("index", 0)
+    discounts_list = context.user_data.get("view_discounts", [])
 
-# --- ВАЛЮТА ---
-def currency(update: Update, context: CallbackContext):
-    text = update.message.text
-    if text in NAV_BUTTONS:
-        return handle_nav(update, context)
-    if text not in ["MDL", "EUR", "USD"]:
-        update.message.reply_text("Выберите валюту из предложенных")
-        return CURRENCY
+    if idx >= len(discounts_list):
+        # Конец списка, возвращаем в главное меню
+        update.message.reply_text(
+            "✅ Все скидки показаны. Главное меню:",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
+        )
+        context.user_data.pop("view_discounts", None)
+        context.user_data.pop("index", None)
+        return
 
-    before = context.user_data["before"]
-    after = context.user_data["after"]
-    discount = (before - after) / before * 100
-    if discount < 20:
-        update.message.reply_text(f"❌ Скидка {discount:.1f}% — минимум 20%!")
-        return ConversationHandler.END
+    d = discounts_list[idx]
 
-    context.user_data["currency"] = text
-    context.user_data["discount"] = discount
+    # Фото, название товара, цена, процент
+    if "photo" in d:
+        update.message.reply_photo(d["photo"])
 
-    # Геолокация
+    msg = (
+        f"🛍 {d.get('product','Товар')}\n"
+        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
+        f"📊 {d['discount']:.1f}%"
+    )
+    update.message.reply_text(msg)
+
+    # Кнопка для раскрытия магазина
     update.message.reply_text(
-        "📍 Отправьте геолокацию магазина\nУбедитесь, что GPS включён",
+        "Чтобы увидеть магазин и адрес, нажмите кнопку:",
         reply_markup=ReplyKeyboardMarkup(
-            [[KeyboardButton("📍 Поделиться локацией", request_location=True)]],
+            [["🎬 Показать магазин (после рекламы)"], ["➡️ Следующая скидка"], ["🏠 Главное меню"]],
             resize_keyboard=True,
             one_time_keyboard=True
         )
     )
-    return LOCATION
 
-# --- ЛОКАЦИЯ ---
-def add_store_location(update: Update, context: CallbackContext):
+# --- Обработчик кнопок в процессе просмотра скидок ---
+def discount_buttons(update: Update, context: CallbackContext):
     text = update.message.text
-    if text in NAV_BUTTONS:
-        return handle_nav(update, context)
+    idx = context.user_data.get("index", 0)
+    discounts_list = context.user_data.get("view_discounts", [])
 
-    loc = update.message.location
-    if not loc:
-        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
-        return LOCATION
-
-    coords = (loc.latitude, loc.longitude)
-    address = geolocator.reverse(coords).address
-    context.user_data["address"] = address
-
-    # Проверяем существующие магазины
-    existing_stores = [name for name, data in stores.items() if data["address"] == address]
-    keyboard = [[s] for s in sorted(existing_stores)] if existing_stores else []
-    keyboard.append(["➕ Новый магазин"])
-
-    update.message.reply_text(
-        f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    )
-    return STORE_SELECT
-
-# --- ВЫБОР МАГАЗИНА ---
-def store_select(update: Update, context: CallbackContext):
-    choice = update.message.text
-    if choice in NAV_BUTTONS:
-        return handle_nav(update, context)
-    if choice == "➕ Новый магазин":
-        update.message.reply_text("✏️ Введите название магазина:", reply_markup=ReplyKeyboardRemove())
-        return STORE_NAME
-
-    # выбран существующий магазин
-    context.user_data["store"] = choice
-    return finish(update, context)
-
-# --- НАЗВАНИЕ МАГАЗИНА ---
-def store_name(update: Update, context: CallbackContext):
-    text = update.message.text
-    if text in NAV_BUTTONS:
-        return handle_nav(update, context)
-
-    addr = context.user_data["address"]
-    addresses.setdefault(addr, []).append(text)
-    stores[text] = {"coords": None, "address": addr, "products": []}
-    context.user_data["store"] = text
-    return finish(update, context)
-
-# --- ФИНИШ ---
-def finish(update: Update, context: CallbackContext):
-    d = context.user_data
-    discounts.append(d.copy())
-    update.message.reply_text(
-        f"✅ Скидка добавлена\n"
-        f"🏬 {d['store']}\n"
-        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
-        f"📊 {d['discount']:.1f}%\n"
-        f"📍 {d.get('address','Адрес не указан')}",
-        reply_markup=main_menu_keyboard()
-    )
-    context.user_data.clear()
-    return ConversationHandler.END
-
-# --- ОБРАБОТКА НАВИГАЦИИ ---
-def handle_nav(update: Update, context: CallbackContext):
-    text = update.message.text
-    if text == "❌ Отмена":
-        update.message.reply_text("Процесс отменён", reply_markup=main_menu_keyboard())
-        context.user_data.clear()
-        return ConversationHandler.END
-    if text == "⬅️ Назад":
-        # Простая логика "назад": возвращаем на предыдущий шаг
-        # В реальном коде можно хранить context.user_data["last_step"]
-        update.message.reply_text("⬅️ Возврат к предыдущему шагу", reply_markup=main_menu_keyboard())
-        return ConversationHandler.END
-    return ConversationHandler.END
-
-# --- HANDLER ---
-def get_conversation_handler():
-    return ConversationHandler(
-        entry_points=[MessageHandler(Filters.regex("^➕ Добавить скидку$"), start_discount)],
-        states={
-            PHOTO: [MessageHandler(Filters.photo, get_photo)],
-            PRICE_BEFORE: [MessageHandler(Filters.text, price_before)],
-            PRICE_AFTER: [MessageHandler(Filters.text, price_after)],
-            CURRENCY: [MessageHandler(Filters.text, currency)],
-            LOCATION: [MessageHandler(Filters.location, add_store_location)],
-            STORE_SELECT: [MessageHandler(Filters.text, store_select)],
-            STORE_NAME: [MessageHandler(Filters.text, store_name)],
-        },
-        fallbacks=[]
-    )
+    if text == "🎬 Показать магазин (после рекламы)":
+        if idx < len(discounts_list):
+            d = discounts_list[idx]
+            update.message.reply_text(
+                f"🏬 {d.get('store','Неизвестно')}\n"
+                f"📍 {d.get('address','Неизвестно')}"
+            )
+    elif text == "➡️ Следующая скидка":
+        context.user_data["index"] = idx + 1
+        show_next_discount(update, context)
+        return
+    elif text == "🏠 Главное меню":
+        update.message.reply_text(
+            "Вы вернулись в главное меню:",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
+        )
+        context.user_data.pop("view_discounts", None)
+        context.user_data.pop("index", None)
+        return
 
 # --- MAIN ---
 def main():
-    from db import init_db
-    from telegram.ext import Updater
-    TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
-    print(">>> MAIN STARTED <<<")
-    init_db()
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
+
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(get_conversation_handler())
+    dp.add_handler(MessageHandler(Filters.regex("^🔍 Найти скидку$"), find_discount))
+    dp.add_handler(MessageHandler(Filters.text & Filters.regex("🎬 Показать магазин|➡️ Следующая скидка|🏠 Главное меню"), discount_buttons))
+
     updater.start_polling()
-    print(">>> POLLING START <<<")
     updater.idle()
 
 if __name__ == "__main__":
