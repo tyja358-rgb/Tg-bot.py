@@ -1,10 +1,9 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
-from shops import get_conversation_handler  # импортируем весь сценарий скидок
-from db import init_db
+from shops import get_conversation_handler, start_discount
 
-TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"  # вставьте свой токен
+TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
 
 # Главное меню кнопки
 MAIN_MENU = [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]]
@@ -21,22 +20,58 @@ def start(update: Update, context: CallbackContext):
         )
     )
 
+def main_menu_handler(update: Update, context: CallbackContext):
+    """Обработка нажатий главного меню"""
+    text = update.message.text
+
+    # Игнорируем повторное нажатие "Добавить скидку" если уже в процессе
+    if context.user_data.get("in_discount_flow"):
+        update.message.reply_text(
+            "Вы уже начали добавление скидки. Пожалуйста, завершите текущий процесс или нажмите «❌ Отмена».",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
+        return
+
+    if text == "➕ Добавить скидку":
+        context.user_data.clear()
+        context.user_data["in_discount_flow"] = True
+        return start_discount(update, context)
+
+    elif text == "🔍 Найти скидку":
+        update.message.reply_text(
+            "🔍 Вы нажали 'Найти скидку'. Функционал пока заглушка.",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
+
+    elif text == "💰 KWT / Бар":
+        update.message.reply_text(
+            "💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
+
+    else:
+        update.message.reply_text(
+            "Выберите действие из меню:",
+            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
+        )
+
 def main():
     print(">>> MAIN STARTED <<<")
-    init_db()
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
     # Команда /start
     dp.add_handler(CommandHandler("start", start))
 
-    # 🔥 Подключаем полностью conversation handler из shops.py
+    # Главное меню: слушаем кнопки меню
+    dp.add_handler(MessageHandler(
+        Filters.text & Filters.regex("➕ Добавить скидку|🔍 Найти скидку|💰 KWT / Бар"),
+        main_menu_handler
+    ))
+
+    # ConversationHandler для shops.py
     dp.add_handler(get_conversation_handler())
 
-    # Убираем любые отдельные MessageHandler на "➕ Добавить скидку", иначе зацикливание
-    # dp.add_handler(MessageHandler(Filters.regex("^➕ Добавить скидку$"), start_discount))  <- убрать!
-
-    # Старт polling
     updater.start_polling()
     print(">>> POLLING START <<<")
     updater.idle()
