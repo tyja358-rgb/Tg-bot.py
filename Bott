@@ -1,17 +1,13 @@
-def finish(update, context):
-    d = context.user_data
-    discounts.append(d.copy())
-    update.message.reply_text(
-        f"✅ Скидка добавлена\n"
-        f"🏬 {d['store']}\n"
-        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
-        f"📊 {d['discount']:.1f}%\n"
-        f"📍 {d.get('address','Адрес не указан')}",
-        reply_markup=ReplyKeyboardMarkup(
-            [["➕ Добавить скидку"]],
-            resize_keyboard=True,
-            one_time_keyboard=True
+def store_select(update, context):
+    choice = update.message.text
+
+    if choice == "➕ Новый магазин":
+        update.message.reply_text(
+            "✏️ Введите название магазина:",
+            reply_markup=ReplyKeyboardRemove()
         )
-    )
-    context.user_data.clear()  # очищаем данные для нового ввода
-    return ConversationHandler.END
+        return STORE_NAME
+
+    # выбран существующий магазин
+    context.user_data["store"] = choice   # ← важно: store, не store_name
+    return finish(update, context)         # ← КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ
