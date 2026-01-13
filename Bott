@@ -2,7 +2,7 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler
 from shops import get_conversation_handler  # импортируем весь сценарий скидок
 
-TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"  # вставьте свой токен
+TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"  # вставьте свой токен
 
 def start(update: Update, context):
     context.user_data.clear()
