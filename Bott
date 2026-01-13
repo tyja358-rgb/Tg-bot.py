@@ -1,27 +1,40 @@
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler
+from telegram.ext import Updater, CommandHandler, CallbackContext
+
 from shops import get_conversation_handler
+from db import init_db
 
-TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"  # вставьте свой токен
+TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
 
-def start(update: Update, context):
+MAIN_MENU = [
+    ["➕ Добавить скидку"],
+    ["🔍 Найти скидку", "💰 KWT / Бар"]
+]
+
+def start(update: Update, context: CallbackContext):
     context.user_data.clear()
-    keyboard = [["➕ Добавить скидку"]]
     update.message.reply_text(
-        "Добро пожаловать 👋",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+        "Добро пожаловать 👋\nВыберите действие:",
+        reply_markup=ReplyKeyboardMarkup(
+            MAIN_MENU,
+            resize_keyboard=True
+        )
     )
 
 def main():
-    print(">>> MAIN STARTED<<<")
+    print(">>> MAIN STARTED <<<")
+    init_db()
+
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(get_conversation_handler())  # весь сценарий скидок из shops.py
+
+    # 🔥 ВАЖНО: сценарий скидки полностью внутри shops.py
+    dp.add_handler(get_conversation_handler())
 
     updater.start_polling()
-    print(">>> POLLING START<<<")
+    print(">>> POLLING START <<<")
     updater.idle()
 
 if __name__ == "__main__":
