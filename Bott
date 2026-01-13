@@ -1,13 +1,32 @@
-def store_select(update, context):
-    choice = update.message.text
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram.ext import Updater, CommandHandler
+from shops import get_conversation_handler
+from db import init_db  # если используешь БД
 
-    if choice == "➕ Новый магазин":
-        update.message.reply_text(
-            "✏️ Введите название магазина:",
-            reply_markup=ReplyKeyboardRemove()
+TOKEN = "ВАШ_ТОКЕН"
+
+def start(update: Update, context):
+    context.user_data.clear()
+    keyboard = [["➕ Добавить скидку"]]
+    update.message.reply_text(
+        "Добро пожаловать 👋",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard, resize_keyboard=True, one_time_keyboard=True
         )
-        return STORE_NAME
+    )
 
-    # выбран существующий магазин
-    context.user_data["store"] = choice   # ← важно: store, не store_name
-    return finish(update, context)         # ← КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ
+def main():
+    print(">>> MAIN STARTED<<<")
+    init_db()
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(get_conversation_handler())
+
+    updater.start_polling()
+    print(">>> POLLING START<<<")
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
