@@ -1,110 +1,69 @@
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from shops import discounts  # импортируем глобальный список скидок из shops.py
 
-TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
+from shops import get_conversation_handler, start_discount
+from db import init_db
 
-# --- Главное меню ---
+TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
+
+# Главное меню кнопки
 MAIN_MENU = [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]]
 
 def start(update: Update, context: CallbackContext):
+    """Старт бота и главное меню"""
     context.user_data.clear()
     update.message.reply_text(
-        "Добро пожаловать 👋",
-        reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
-    )
-
-# --- Найти скидку ---
-def find_discount(update: Update, context: CallbackContext):
-    if not discounts:
-        update.message.reply_text(
-            "Пока нет доступных скидок 😔",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
-        )
-        return
-
-    # Сортируем скидки по проценту от большего к меньшему
-    sorted_discounts = sorted(discounts, key=lambda x: x["discount"], reverse=True)
-
-    # Сохраняем сортированный список в user_data, чтобы раскрывать магазин по кнопке
-    context.user_data["view_discounts"] = sorted_discounts
-    context.user_data["index"] = 0  # текущая позиция
-
-    show_next_discount(update, context)
-
-def show_next_discount(update: Update, context: CallbackContext):
-    idx = context.user_data.get("index", 0)
-    discounts_list = context.user_data.get("view_discounts", [])
-
-    if idx >= len(discounts_list):
-        # Конец списка, возвращаем в главное меню
-        update.message.reply_text(
-            "✅ Все скидки показаны. Главное меню:",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
-        )
-        context.user_data.pop("view_discounts", None)
-        context.user_data.pop("index", None)
-        return
-
-    d = discounts_list[idx]
-
-    # Фото, название товара, цена, процент
-    if "photo" in d:
-        update.message.reply_photo(d["photo"])
-
-    msg = (
-        f"🛍 {d.get('product','Товар')}\n"
-        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
-        f"📊 {d['discount']:.1f}%"
-    )
-    update.message.reply_text(msg)
-
-    # Кнопка для раскрытия магазина
-    update.message.reply_text(
-        "Чтобы увидеть магазин и адрес, нажмите кнопку:",
+        "Добро пожаловать 👋\nВыберите действие:",
         reply_markup=ReplyKeyboardMarkup(
-            [["🎬 Показать магазин (после рекламы)"], ["➡️ Следующая скидка"], ["🏠 Главное меню"]],
+            MAIN_MENU,
             resize_keyboard=True,
             one_time_keyboard=True
         )
     )
 
-# --- Обработчик кнопок в процессе просмотра скидок ---
-def discount_buttons(update: Update, context: CallbackContext):
+def main_menu_handler(update: Update, context: CallbackContext):
+    """Обработка нажатий главного меню"""
     text = update.message.text
-    idx = context.user_data.get("index", 0)
-    discounts_list = context.user_data.get("view_discounts", [])
 
-    if text == "🎬 Показать магазин (после рекламы)":
-        if idx < len(discounts_list):
-            d = discounts_list[idx]
-            update.message.reply_text(
-                f"🏬 {d.get('store','Неизвестно')}\n"
-                f"📍 {d.get('address','Неизвестно')}"
-            )
-    elif text == "➡️ Следующая скидка":
-        context.user_data["index"] = idx + 1
-        show_next_discount(update, context)
-        return
-    elif text == "🏠 Главное меню":
+    if text == "➕ Добавить скидку":
+        # Запускаем сценарий добавления скидки из shops.py
+        return start_discount(update, context)
+
+    elif text == "🔍 Найти скидку":
+        # Здесь будет ваша логика поиска скидки
+        update.message.reply_text("🔍 Вы нажали 'Найти скидку'. Функционал пока заглушка.")
+
+    elif text == "💰 KWT / Бар":
+        update.message.reply_text("💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.")
+
+    else:
         update.message.reply_text(
-            "Вы вернулись в главное меню:",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
+            "Выберите действие из меню:",
+            reply_markup=ReplyKeyboardMarkup(
+                MAIN_MENU,
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
         )
-        context.user_data.pop("view_discounts", None)
-        context.user_data.pop("index", None)
-        return
 
-# --- MAIN ---
 def main():
+    print(">>> MAIN STARTED <<<")
+    init_db()
     updater = Updater(TOKEN, use_context=True)
     dp = updater.dispatcher
 
+    # Команда /start
     dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.regex("^🔍 Найти скидку$"), find_discount))
-    dp.add_handler(MessageHandler(Filters.text & Filters.regex("🎬 Показать магазин|➡️ Следующая скидка|🏠 Главное меню"), discount_buttons))
 
+    # Главное меню: слушаем кнопки меню
+    dp.add_handler(MessageHandler(Filters.text & Filters.regex("➕ Добавить скидку|🔍 Найти скидку|💰 KWT / Бар"), main_menu_handler))
+
+    # ConversationHandler для shops.py
+    dp.add_handler(get_conversation_handler())
+
+    # Старт polling
     updater.start_polling()
+    print(">>> POLLING START <<<")
     updater.idle()
 
 if __name__ == "__main__":
