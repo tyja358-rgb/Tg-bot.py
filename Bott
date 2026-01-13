@@ -1,16 +1,16 @@
-from telegram import Update, ReplyKeyboardMarkup
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 from shops import get_conversation_handler, start_discount
 from db import init_db
 
-TOKEN = "8465624288:AAGKPaKjgGKxOZ3e1xN4pFTI_gTzP3KiVjc"
+TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
 
 # Главное меню кнопки
 MAIN_MENU = [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]]
 
-def start(update: Update, context: CallbackContext):
-    """Старт бота и главное меню"""
+def main_menu(update: Update, context: CallbackContext):
+    """Показываем главное меню пользователю"""
     context.user_data.clear()
     update.message.reply_text(
         "Добро пожаловать 👋\nВыберите действие:",
@@ -21,6 +21,10 @@ def start(update: Update, context: CallbackContext):
         )
     )
 
+def start(update: Update, context: CallbackContext):
+    """Команда /start"""
+    main_menu(update, context)
+
 def main_menu_handler(update: Update, context: CallbackContext):
     """Обработка нажатий главного меню"""
     text = update.message.text
@@ -30,11 +34,20 @@ def main_menu_handler(update: Update, context: CallbackContext):
         return start_discount(update, context)
 
     elif text == "🔍 Найти скидку":
-        # Здесь будет ваша логика поиска скидки
-        update.message.reply_text("🔍 Вы нажали 'Найти скидку'. Функционал пока заглушка.")
+        # Заглушка: показать скидки
+        update.message.reply_text(
+            "🔍 Вы нажали 'Найти скидку'.\nЗдесь будет функционал просмотра скидок."
+        )
+        # После просмотра скидок возвращаем в главное меню
+        main_menu(update, context)
 
     elif text == "💰 KWT / Бар":
-        update.message.reply_text("💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.")
+        # Заглушка: показать KWT / Бар
+        update.message.reply_text(
+            "💰 Вы нажали 'KWT / Бар'.\nЗдесь будет функционал KWT / Бар."
+        )
+        # После действий возвращаем в главное меню
+        main_menu(update, context)
 
     else:
         update.message.reply_text(
@@ -56,9 +69,14 @@ def main():
     dp.add_handler(CommandHandler("start", start))
 
     # Главное меню: слушаем кнопки меню
-    dp.add_handler(MessageHandler(Filters.text & Filters.regex("➕ Добавить скидку|🔍 Найти скидку|💰 KWT / Бар"), main_menu_handler))
+    dp.add_handler(
+        MessageHandler(
+            Filters.text & Filters.regex("➕ Добавить скидку|🔍 Найти скидку|💰 KWT / Бар"),
+            main_menu_handler
+        )
+    )
 
-    # ConversationHandler для shops.py
+    # ConversationHandler для shops.py (добавление скидки)
     dp.add_handler(get_conversation_handler())
 
     # Старт polling
