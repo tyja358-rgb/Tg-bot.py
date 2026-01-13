@@ -1,36 +1,219 @@
-def main_menu_handler(update: Update, context: CallbackContext):
-    """Обработка нажатий главного меню"""
+from geopy.geocoders import Nominatim
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram.ext import ConversationHandler, MessageHandler, Filters, CallbackContext
+
+PHOTO, PRICE_BEFORE, PRICE_AFTER, CURRENCY, LOCATION, STORE_SELECT, STORE_NAME = range(7)
+
+stores = {}         # store_name -> {"coords": (), "address": "", "products": []}
+addresses = {}      # address -> [store_name]
+discounts = []
+
+geolocator = Nominatim(user_agent="kwt-bot")
+
+BACK = "⬅️ Назад"
+CANCEL = "❌ Отмена"
+
+def nav_keyboard():
+    return ReplyKeyboardMarkup([[BACK, CANCEL]], resize_keyboard=True)
+
+# --- СТАРТ ---
+def start_discount(update: Update, context: CallbackContext):
+    context.user_data.clear()
+    keyboard = [["➕ Добавить скидку"]]
+    update.message.reply_text(
+        "📸 Сделайте фото скидки.\nТовар и ценник должны быть в кадре.\nНажмите 📎 → Камера, сделайте фото и отправьте его.",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    )
+    return PHOTO
+
+# --- ФОТО ---
+def get_photo(update: Update, context: CallbackContext):
     text = update.message.text
-
-    if text == "➕ Добавить скидку":
-        # Сбрасываем данные пользователя, чтобы сценарий стартовал с чистого листа
-        context.user_data.clear()  
-        # Запускаем сценарий добавления скидки из shops.py
+    if text == BACK:
         return start_discount(update, context)
+    if text == CANCEL:
+        update.message.reply_text("❌ Процесс отменён", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()
+        return ConversationHandler.END
 
-    elif text == "🔍 Найти скидку":
-        # Заглушка для поиска скидок
-        update.message.reply_text(
-            "🔍 Вы нажали 'Найти скидку'. Функционал пока заглушка.",
-            reply_markup=ReplyKeyboardMarkup(
-                MAIN_MENU, resize_keyboard=True, one_time_keyboard=True
-            )
-        )
+    context.user_data.clear()
+    context.user_data["photo"] = update.message.photo[-1].file_id
+    update.message.reply_text("💰 Введите цену ДО", reply_markup=nav_keyboard())
+    return PRICE_BEFORE
 
-    elif text == "💰 KWT / Бар":
-        # Заглушка для KWT / Бар
-        update.message.reply_text(
-            "💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.",
-            reply_markup=ReplyKeyboardMarkup(
-                MAIN_MENU, resize_keyboard=True, one_time_keyboard=True
-            )
-        )
+# --- ЦЕНА ДО ---
+def price_before(update: Update, context: CallbackContext):
+    text = update.message.text
+    if text == BACK:
+        return get_photo(update, context)
+    if text == CANCEL:
+        update.message.reply_text("❌ Процесс отменён", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()
+        return ConversationHandler.END
 
-    else:
-        # Если пользователь написал что-то не из меню — возвращаем главное меню
-        update.message.reply_text(
-            "Выберите действие из меню:",
-            reply_markup=ReplyKeyboardMarkup(
-                MAIN_MENU, resize_keyboard=True, one_time_keyboard=True
-            )
-        )
+    try:
+        context.user_data["before"] = float(text)
+    except:
+        update.message.reply_text("Введите число", reply_markup=nav_keyboard())
+        return PRICE_BEFORE
+
+    update.message.reply_text("🔻 Введите цену ПОСЛЕ", reply_markup=nav_keyboard())
+    return PRICE_AFTER
+
+# --- ЦЕНА ПОСЛЕ ---
+def price_after(update: Update, context: CallbackContext):
+    text = update.message.text
+    if text == BACK:
+        return price_before(update, context)
+    if text == CANCEL:
+        update.message.reply_text("❌ Процесс отменён", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    try:
+        context.user_data["after"] = float(text)
+    except:
+        update.message.reply_text("Введите число", reply_markup=nav_keyboard())
+        return PRICE_AFTER
+
+    before = context.user_data["before"]
+    after = context.user_data["after"]
+    discount = (before - after) / before * 100
+
+    if discount < 20:
+        update.message.reply_text(f"❌ Скидка {discount:.1f}%\nМинимум 20%", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    context.user_data["discount"] = discount
+
+    keyboard = [
+        ["MDL", "EUR", "USD"],
+        [BACK, CANCEL]
+    ]
+    update.message.reply_text("💱 Выберите валюту", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
+    return CURRENCY
+
+# --- ВАЛЮТА ---
+def currency(update: Update, context: CallbackContext):
+    text = update.message.text
+    if text == BACK:
+        return price_after(update, context)
+    if text == CANCEL:
+        update.message.reply_text("❌ Процесс отменён", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    if text not in ["MDL", "EUR", "USD"]:
+        update.message.reply_text("Выберите валюту кнопкой ниже", reply_markup=nav_keyboard())
+        return CURRENCY
+
+    context.user_data["currency"] = text
+
+    keyboard = [
+        [KeyboardButton("📍 Поделиться локацией", request_location=True)],
+        [BACK, CANCEL]
+    ]
+    update.message.reply_text(
+        "📍 Отправьте геолокацию магазина\nУбедитесь, что GPS включён",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    )
+    return LOCATION
+
+# --- ЛОКАЦИЯ ---
+def add_store_location(update: Update, context: CallbackContext):
+    text = update.message.text
+    if text == BACK:
+        return currency(update, context)
+    if text == CANCEL:
+        update.message.reply_text("❌ Процесс отменён", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    loc = update.message.location
+    if not loc:
+        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.", reply_markup=nav_keyboard())
+        return LOCATION
+
+    coords = (loc.latitude, loc.longitude)
+    address = geolocator.reverse(coords).address
+    context.user_data["address"] = address
+
+    existing_stores = [name for name, data in stores.items() if data["address"] == address]
+    keyboard = [[s] for s in sorted(existing_stores)] if existing_stores else []
+    keyboard.append(["➕ Новый магазин"])
+    keyboard.append([BACK, CANCEL])
+    update.message.reply_text(
+        f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
+    return STORE_SELECT
+
+# --- ВЫБОР МАГАЗИНА ---
+def store_select(update: Update, context: CallbackContext):
+    text = update.message.text
+    if text == BACK:
+        return add_store_location(update, context)
+    if text == CANCEL:
+        update.message.reply_text("❌ Процесс отменён", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    if text == "➕ Новый магазин":
+        update.message.reply_text("✏️ Введите название магазина:", reply_markup=nav_keyboard())
+        return STORE_NAME
+
+    context.user_data["store"] = text
+    return finish(update, context)
+
+# --- НАЗВАНИЕ МАГАЗИНА ---
+def store_name(update: Update, context: CallbackContext):
+    text = update.message.text
+    if text == BACK:
+        return store_select(update, context)
+    if text == CANCEL:
+        update.message.reply_text("❌ Процесс отменён", reply_markup=ReplyKeyboardRemove())
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    addr = context.user_data["address"]
+    addresses.setdefault(addr, []).append(text)
+    global stores
+    stores[text] = {
+        "coords": (update.message.location.latitude, update.message.location.longitude) if update.message.location else None,
+        "address": addr,
+        "products": []
+    }
+    context.user_data["store"] = text
+    return finish(update, context)
+
+# --- ФИНИШ ---
+def finish(update: Update, context: CallbackContext):
+    d = context.user_data
+    discounts.append(d.copy())
+    update.message.reply_text(
+        f"✅ Скидка добавлена\n"
+        f"🏬 {d['store']}\n"
+        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
+        f"📊 {d['discount']:.1f}%\n"
+        f"📍 {d.get('address','Адрес не указан')}",
+        reply_markup=ReplyKeyboardMarkup([["➕ Добавить скидку"]], resize_keyboard=True, one_time_keyboard=True)
+    )
+    context.user_data.clear()
+    return ConversationHandler.END
+
+# --- HANDLER ---
+def get_conversation_handler():
+    return ConversationHandler(
+        entry_points=[MessageHandler(Filters.regex("^➕ Добавить скидку$"), start_discount)],
+        states={
+            PHOTO: [MessageHandler(Filters.photo | Filters.text, get_photo)],
+            PRICE_BEFORE: [MessageHandler(Filters.text, price_before)],
+            PRICE_AFTER: [MessageHandler(Filters.text, price_after)],
+            CURRENCY: [MessageHandler(Filters.text, currency)],
+            LOCATION: [MessageHandler(Filters.location | Filters.text, add_store_location)],
+            STORE_SELECT: [MessageHandler(Filters.text, store_select)],
+            STORE_NAME: [MessageHandler(Filters.text, store_name)],
+        },
+        fallbacks=[]
+    )
