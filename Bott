@@ -1,88 +1,29 @@
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram import Update
+from telegram.ext import CallbackContext
 
-from shops import get_conversation_handler, start_discount  # импорт сценария скидок
-from db import init_db
+# Константы состояния
+PRICE_BEFORE = 1
 
-# ====== Токен ======
-TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
+def get_photo(update: Update, context: CallbackContext):
+    """
+    Шаг 1: пользователь присылает фото.
+    Сохраняем file_id фото и переходим на шаг ввода цены ДО.
+    """
+    # Если вдруг еще нет флага процесса скидки — ставим его
+    if "in_discount_flow" not in context.user_data:
+        context.user_data["in_discount_flow"] = True
 
-# ====== Главное меню кнопки ======
-MAIN_MENU = [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]]
-
-# ====== Функция /start ======
-def start(update: Update, context: CallbackContext):
-    """Старт бота и главное меню"""
-    context.user_data.clear()
-    update.message.reply_text(
-        "Добро пожаловать 👋\nВыберите действие:",
-        reply_markup=ReplyKeyboardMarkup(
-            MAIN_MENU,
-            resize_keyboard=True,
-            one_time_keyboard=True
-        )
-    )
-
-# ====== Обработка нажатий главного меню ======
-def main_menu_handler(update: Update, context: CallbackContext):
-    """Обработка нажатий главного меню"""
-    text = update.message.text
-
-    # Если пользователь уже в процессе добавления скидки — игнорируем повторное нажатие
-    if context.user_data.get("in_discount_flow"):
-        update.message.reply_text(
-            "Вы уже начали добавление скидки. Завершите текущий процесс или нажмите «❌ Отмена».",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-        )
-        return
-
-    if text == "➕ Добавить скидку":
-        context.user_data.clear()
-        context.user_data["in_discount_flow"] = True  # помечаем, что пользователь в процессе
-        return start_discount(update, context)
-
-    elif text == "🔍 Найти скидку":
-        update.message.reply_text(
-            "🔍 Вы нажали 'Найти скидку'. Функционал пока заглушка.",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-        )
-
-    elif text == "💰 KWT / Бар":
-        update.message.reply_text(
-            "💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-        )
-
+    # Сохраняем только file_id последнего фото
+    if update.message.photo:
+        context.user_data["photo"] = update.message.photo[-1].file_id
     else:
-        update.message.reply_text(
-            "Выберите действие из меню:",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True)
-        )
+        update.message.reply_text("❌ Пожалуйста, отправьте фотографию товара с ценником.")
+        return PRICE_BEFORE  # остаёмся на этом шаге
 
-# ====== Основная функция ======
-def main():
-    print(">>> MAIN STARTED <<<")
-    init_db()  # если есть база
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    # Команда /start
-    dp.add_handler(CommandHandler("start", start))
-
-    # Главное меню: слушаем кнопки меню
-    dp.add_handler(
-        MessageHandler(Filters.text & Filters.regex("➕ Добавить скидку|🔍 Найти скидку|💰 KWT / Бар"),
-                       main_menu_handler)
+    # Отправляем инструкцию для следующего шага
+    update.message.reply_text(
+        "💰 Отлично! Теперь введите цену ДО скидки (например: 100.0)."
     )
 
-    # ConversationHandler для shops.py
-    dp.add_handler(get_conversation_handler())
-
-    # Старт polling
-    updater.start_polling()
-    print(">>> POLLING START <<<")
-    updater.idle()
-
-
-if __name__ == "__main__":
-    main()
+    # Переходим к следующему состоянию
+    return PRICE_BEFORE
