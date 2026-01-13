@@ -1,22 +1,16 @@
-def add_store_location(update, context):
-    global stores
-    loc = update.message.location
-    if not loc:
-        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
-        return LOCATION
-
-    coords = (loc.latitude, loc.longitude)
-    address = geolocator.reverse(coords).address
-    context.user_data["address"] = address
-
-    # Проверяем, есть ли магазины по этому адресу
-    existing_stores = [name for name, data in stores.items() if data["address"] == address]
-
-    keyboard = [[s] for s in sorted(existing_stores)] if existing_stores else []
-    keyboard.append(["➕ Новый магазин"])  # кнопка для нового магазина
-
-    update.message.reply_text(
-        f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    )
-    return STORE_SELECT
+def store_select(update, context):
+    choice = update.message.text
+    if choice == "➕ Новый магазин":
+        update.message.reply_text(
+            "✏️ Введите название магазина:",
+            reply_markup=ReplyKeyboardRemove()  # убираем кнопки
+        )
+        return STORE_NAME
+    else:
+        context.user_data["store_name"] = choice
+        update.message.reply_text(
+            f"✅ Вы выбрали магазин: {choice}\n"
+            f"📍 {context.user_data.get('address','Адрес не указан')}",
+            reply_markup=ReplyKeyboardRemove()  # убираем кнопки
+        )
+        return finish(update, context)  # переходим к финалу
