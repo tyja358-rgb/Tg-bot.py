@@ -1,33 +1,33 @@
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, ConversationHandler
+def currency(update: Update, context: CallbackContext):
+    cur = update.message.text.strip().upper()
 
-def finish(update, context):
-    d = context.user_data
+    if cur not in ("MDL", "EUR", "USD"):
+        update.message.reply_text("Пожалуйста, выберите валюту кнопкой ниже 👇")
+        return CURRENCY
 
-    # 1️⃣ Сообщение о добавленной скидке — БЕЗ кнопок
+    before = context.user_data["before"]
+    after = context.user_data["after"]
+
+    discount = (before - after) / before * 100
+
+    # ❗ проверка 20%
+    if discount < 20:
+        update.message.reply_text(
+            f"❌ Скидка {discount:.1f}%\nМинимум — 20%",
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    context.user_data["currency"] = cur
+    context.user_data["discount"] = discount
+
     update.message.reply_text(
-        f"✅ Скидка добавлена\n"
-        f"🏬 {d['store']}\n"
-        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
-        f"📊 {d['discount']:.1f}%\n"
-        f"📍 {d['address']}",
-        reply_markup=ReplyKeyboardRemove()
-    )
-
-    # 2️⃣ Реклама — БЕЗ кнопок
-    update.message.reply_text(
-        "🔥 Реклама 🔥\n"
-        "Лучшие скидки и купоны каждый день\n"
-        "➡️ @kwt_deals"
-    )
-
-    # 3️⃣ Возврат в главное меню
-    update.message.reply_text(
-        "Выберите действие:",
+        "📍 Отправьте геолокацию магазина",
         reply_markup=ReplyKeyboardMarkup(
-            [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]],
-            resize_keyboard=True
+            [[KeyboardButton("📍 Поделиться локацией", request_location=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True
         )
     )
 
-    context.user_data.clear()
-    return ConversationHandler.END
+    return LOCATION
