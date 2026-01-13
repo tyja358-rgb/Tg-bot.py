@@ -1,104 +1,182 @@
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from geopy.geocoders import Nominatim
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
+from telegram.ext import ConversationHandler, MessageHandler, Filters, CallbackContext
 
-from shops import get_conversation_handler, start_discount  # ваш рабочий shops.py
-from db import init_db
+# --- СОСТОЯНИЯ ---
+PHOTO, PRICE_BEFORE, PRICE_AFTER, CURRENCY, LOCATION, STORE_SELECT, STORE_NAME = range(7)
 
-TOKEN = "ВАШ_ТОКЕН_ЗДЕСЬ"
+# --- ПАМЯТЬ ---
+stores = {}        # store_name -> {"coords": (), "address": "", "products": []}
+addresses = {}     # address -> [store_name]
+discounts = []
 
-# Главное меню кнопки
-MAIN_MENU = [["➕ Добавить скидку", "🔍 Найти скидку", "💰 KWT / Бар"]]
+# --- ГЕОЛОКАТОР ---
+geolocator = Nominatim(user_agent="kwt-bot")
 
-def start(update: Update, context: CallbackContext):
-    """Старт бота и главное меню"""
-    context.user_data.clear()
+# --- КНОПКИ ---
+BACK = "⬅️ Назад"
+CANCEL = "❌ Отмена"
+
+def nav_keyboard():
+    return ReplyKeyboardMarkup([[BACK, CANCEL]], resize_keyboard=True)
+
+# --- СТАРТ СКИДКИ ---
+def start_discount(update: Update, context: CallbackContext):
+    context.user_data["in_discount_flow"] = True  # помечаем, что процесс начался
     update.message.reply_text(
-        "Добро пожаловать 👋\nВыберите действие:",
-        reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
+        "📸 Сделайте фото скидки.\n"
+        "Товар и ценник должны быть в кадре.\n"
+        "Нажмите 📎 → Камера, сделайте фото и отправьте его.",
+        reply_markup=ReplyKeyboardRemove()
     )
+    return PHOTO
 
-def main_menu_handler(update: Update, context: CallbackContext):
-    """Обработка нажатий главного меню"""
-    text = update.message.text
+# --- ПОЛУЧЕНИЕ ФОТО ---
+def get_photo(update: Update, context: CallbackContext):
+    context.user_data["photo"] = update.message.photo[-1].file_id
+    update.message.reply_text("💰 Введите цену ДО", reply_markup=nav_keyboard())
+    return PRICE_BEFORE
 
-    # Если пользователь уже в процессе добавления скидки — игнорируем повторное нажатие
-    if context.user_data.get("in_discount_flow"):
-        update.message.reply_text(
-            "Вы уже начали добавление скидки. Пожалуйста, завершите текущий процесс или нажмите «❌ Отмена».",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
-        )
-        return
+# --- ЦЕНА ДО ---
+def price_before(update: Update, context: CallbackContext):
+    try:
+        context.user_data["before"] = float(update.message.text)
+    except:
+        update.message.reply_text("Введите число!")
+        return PRICE_BEFORE
 
-    if text == "➕ Добавить скидку":
+    update.message.reply_text("🔻 Введите цену ПОСЛЕ", reply_markup=nav_keyboard())
+    return PRICE_AFTER
+
+# --- ЦЕНА ПОСЛЕ ---
+def price_after(update: Update, context: CallbackContext):
+    try:
+        context.user_data["after"] = float(update.message.text)
+    except:
+        update.message.reply_text("Введите число!")
+        return PRICE_AFTER
+
+    # Проверка минимальной скидки 20%
+    before = context.user_data["before"]
+    after = context.user_data["after"]
+    discount = (before - after) / before * 100
+    if discount < 20:
+        update.message.reply_text(f"❌ Скидка {discount:.1f}% — минимум 20%!")
         context.user_data.clear()
-        context.user_data["in_discount_flow"] = True  # помечаем процесс
-        return start_discount(update, context)
+        return ConversationHandler.END
 
-    elif text == "🔍 Найти скидку":
-        return show_discounts(update, context)
+    context.user_data["discount"] = discount
 
-    elif text == "💰 KWT / Бар":
-        update.message.reply_text(
-            "💰 Вы нажали 'KWT / Бар'. Функционал пока заглушка.",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
-        )
-
-    else:
-        update.message.reply_text(
-            "Выберите действие из меню:",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
-        )
-
-def show_discounts(update: Update, context: CallbackContext):
-    """Показ последних N скидок пользователю (только фото, цена, % скидки)"""
-    from shops import discounts  # берём текущие скидки из shops.py
-
-    if not discounts:
-        update.message.reply_text(
-            "Скидок пока нет 😔",
-            reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
-        )
-        return
-
-    # Сортируем по проценту скидки, от большего к меньшему
-    sorted_discounts = sorted(discounts, key=lambda d: d.get("discount", 0), reverse=True)
-
-    # Показываем последние 5 скидок
-    for d in sorted_discounts[:5]:
-        text = f"💰 {d['before']} → {d['after']} {d['currency']}\n📊 {d['discount']:.1f}%"
-        update.message.reply_photo(
-            photo=d['photo'],
-            caption=text
-        )
-
-    # Возвращаем в главное меню
+    # Валюта
+    keyboard = [["MDL", "EUR", "USD"]]
     update.message.reply_text(
-        "Главное меню:",
+        "💱 Выберите валюту",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
+    return CURRENCY
+
+# --- ВЫБОР ВАЛЮТЫ ---
+def currency(update: Update, context: CallbackContext):
+    cur = update.message.text
+    if cur not in ["MDL", "EUR", "USD"]:
+        update.message.reply_text("Выберите валюту из списка")
+        return CURRENCY
+
+    context.user_data["currency"] = cur
+
+    # Запрос геолокации
+    update.message.reply_text(
+        "📍 Отправьте геолокацию магазина\nУбедитесь, что GPS включён",
+        reply_markup=ReplyKeyboardMarkup(
+            [[KeyboardButton("📍 Поделиться локацией", request_location=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True
+        )
+    )
+    return LOCATION
+
+# --- ЛОКАЦИЯ ---
+def add_store_location(update: Update, context: CallbackContext):
+    loc = update.message.location
+    if not loc:
+        update.message.reply_text("Не удалось получить локацию. Попробуйте снова.")
+        return LOCATION
+
+    coords = (loc.latitude, loc.longitude)
+    address = geolocator.reverse(coords).address
+    context.user_data["address"] = address
+
+    # Проверка, есть ли магазины по адресу
+    existing_stores = [name for name, data in stores.items() if data["address"] == address]
+    keyboard = [[s] for s in sorted(existing_stores)] if existing_stores else []
+    keyboard.append(["➕ Новый магазин"])
+    update.message.reply_text(
+        f"Адрес: {address}\n🏬 Выберите магазин или добавьте новый:",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    )
+    return STORE_SELECT
+
+# --- ВЫБОР МАГАЗИНА ---
+def store_select(update: Update, context: CallbackContext):
+    choice = update.message.text
+    if choice == "➕ Новый магазин":
+        update.message.reply_text("✏️ Введите название магазина:", reply_markup=ReplyKeyboardRemove())
+        return STORE_NAME
+
+    context.user_data["store"] = choice
+    return finish(update, context)
+
+# --- НАЗВАНИЕ МАГАЗИНА ---
+def store_name(update: Update, context: CallbackContext):
+    name = update.message.text
+    addr = context.user_data["address"]
+
+    addresses.setdefault(addr, []).append(name)
+    stores[name] = {
+        "coords": (update.message.location.latitude, update.message.location.longitude) if update.message.location else None,
+        "address": addr,
+        "products": []
+    }
+    context.user_data["store"] = name
+    return finish(update, context)
+
+# --- ФИНИШ ---
+def finish(update: Update, context: CallbackContext):
+    d = context.user_data
+    discounts.append(d.copy())
+
+    # Показ пользователю
+    update.message.reply_text(
+        f"✅ Скидка добавлена\n"
+        f"🏬 {d['store']}\n"
+        f"💰 {d['before']} → {d['after']} {d['currency']}\n"
+        f"📊 {d['discount']:.1f}%\n"
+        f"📍 {d.get('address','Адрес не указан')}"
+    )
+
+    # Возврат в главное меню
+    from bot import MAIN_MENU
+    update.message.reply_text(
+        "Вы вернулись в главное меню:",
         reply_markup=ReplyKeyboardMarkup(MAIN_MENU, resize_keyboard=True, one_time_keyboard=True)
     )
 
-def main():
-    print(">>> MAIN STARTED <<<")
-    init_db()
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+    # Только после показа меню очищаем user_data
+    context.user_data.clear()
+    return ConversationHandler.END
 
-    # Команда /start
-    dp.add_handler(CommandHandler("start", start))
-
-    # Главное меню: слушаем кнопки меню
-    dp.add_handler(MessageHandler(
-        Filters.text & Filters.regex("➕ Добавить скидку|🔍 Найти скидку|💰 KWT / Бар"),
-        main_menu_handler
-    ))
-
-    # ConversationHandler для shops.py (добавление скидки)
-    dp.add_handler(get_conversation_handler())
-
-    # Старт polling
-    updater.start_polling()
-    print(">>> POLLING START <<<")
-    updater.idle()
-
-if __name__ == "__main__":
-    main()
+# --- ЭКСПОРТ HANDLER ---
+def get_conversation_handler():
+    return ConversationHandler(
+        entry_points=[MessageHandler(Filters.regex("^➕ Добавить скидку$"), start_discount)],
+        states={
+            PHOTO: [MessageHandler(Filters.photo, get_photo)],
+            PRICE_BEFORE: [MessageHandler(Filters.text & ~Filters.command, price_before)],
+            PRICE_AFTER: [MessageHandler(Filters.text & ~Filters.command, price_after)],
+            CURRENCY: [MessageHandler(Filters.text & ~Filters.command, currency)],
+            LOCATION: [MessageHandler(Filters.location, add_store_location)],
+            STORE_SELECT: [MessageHandler(Filters.text & ~Filters.command, store_select)],
+            STORE_NAME: [MessageHandler(Filters.text & ~Filters.command, store_name)],
+        },
+        fallbacks=[MessageHandler(Filters.regex(f"^{CANCEL}$"), lambda u,c: (u.message.reply_text("Процесс отменён!"), ConversationHandler.END)[1])]
+    )
